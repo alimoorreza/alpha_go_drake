@@ -1,3 +1,12 @@
+# Md Alimoor Reza
+# md.reza@drake.edu
+# Assistant Professor
+# Drake University
+# November, 2023
+
+
+
+
 # Step 1: load the Torch library and other utilities
 #----------------------------------------------------
 from torch.utils.data import DataLoader
