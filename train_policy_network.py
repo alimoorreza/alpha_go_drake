@@ -230,7 +230,7 @@ class AlphaGoPolicyNetwork(nn.Module):
 
 
 #--------------------------------------------------------------------------------------------------
-class AlphaGoPolicyNetwork_V2(nn.Module):
+class AlphaGoPolicyNetwork_v2(nn.Module):
 
     def __init__(self, board_height, board_width, nf=32, number_of_moves=19*19):
         super(AlphaGoPolicyNetwork_V2, self).__init__()
