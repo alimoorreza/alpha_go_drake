@@ -1,12 +1,3 @@
-# Md Alimoor Reza
-# md.reza@drake.edu
-# Assistant Professor
-# Drake University
-# November, 2023
-
-
-
-
 # Step 1: load the Torch library and other utilities
 #----------------------------------------------------
 from torch.utils.data import DataLoader
@@ -25,6 +16,7 @@ import os
 import time
 import pdb
 from scipy.io import savemat, loadmat
+import logging
 
 device = (
     "cuda"
@@ -193,15 +185,6 @@ def read_board_data_from_file(file_name):
 
 
     
-#training_file_name           = 'data/human_replay_go_test3.txt'
-#training_file_name           = 'data/human_replay_go.txt'
-training_file_name           = 'data/TrainData.txt'
-t0 = time.time()
-board_tensors, label_tensors = read_board_data_from_file(training_file_name)
-#print(f"Time: it took {time.time()-t0} seconds to read 8 MB input file of human replays of go games")
-print(f"Time: it took {time.time()-t0} seconds to read 189 MB input file of human replays of go games")
-train_dataset                = GoBoardDataset(board_tensors, label_tensors)
-  
 
 # Step 3: our network
 #--------------------------------------------------------------------------------------------------
@@ -246,9 +229,59 @@ class AlphaGoPolicyNetwork(nn.Module):
         return output
 
 
-policy_network_model = AlphaGoPolicyNetwork(board_height=19, board_width=19, nf=32, number_of_moves=NUMBER_OF_MOVES)
-policy_network_model.to(device)
-print(policy_network_model)
+#--------------------------------------------------------------------------------------------------
+class AlphaGoPolicyNetwork_V2(nn.Module):
+
+    def __init__(self, board_height, board_width, nf=32, number_of_moves=19*19):
+        super(AlphaGoPolicyNetwork_V2, self).__init__()
+
+        self.rows             = board_height
+        self.cols             = board_width
+        self.input_channel    = 1
+        self.conv_window_size = 2
+
+        self.encoder = nn.Sequential(
+          nn.Conv2d(self.input_channel,  nf,     self.conv_window_size),
+          nn.BatchNorm2d(nf),
+          nn.Conv2d(nf, nf*2,   self.conv_window_size),
+          nn.BatchNorm2d(nf*2),
+          nn.Conv2d(nf*2, nf*4, self.conv_window_size),
+          nn.BatchNorm2d(nf*4),
+          nn.Conv2d(nf*4, nf*8, self.conv_window_size),
+          nn.BatchNorm2d(nf*8),
+
+          #Added Layers
+          nn.Conv2d(nf*8, nf*16,   self.conv_window_size),
+          nn.BatchNorm2d(nf*16),
+          nn.Conv2d(nf*16, nf*32, self.conv_window_size),
+          nn.BatchNorm2d(nf*32),
+          nn.Conv2d(nf*32, nf*64, self.conv_window_size),
+          nn.BatchNorm2d(nf*64),
+          nn.Conv2d(nf*64, nf*128, self.conv_window_size),
+          nn.BatchNorm2d(nf*128)
+        )
+
+        self.flatten                    = nn.Flatten()
+
+        # End layers: a series of dense linear layers (almost like an MLP for final classification)
+        self.linear_layers = nn.Sequential(
+                nn.Linear(495616, int(495616/2)),
+                nn.ReLU(),
+                nn.Linear(int(495616/2), 1024),
+                nn.ReLU(),
+                nn.Linear(1024, number_of_moves)
+            )
+
+    def forward(self, x):
+        # forward pass
+        output = self.encoder(x)
+        #pdb.set_trace()
+        output = self.flatten(output)
+        output = self.linear_layers(output)
+
+        return output
+
+
 
 # Step 4: Your training and testing functions
 #--------------------------------------------------------------------------------------
@@ -288,7 +321,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
         if batch % 10 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            logging.info(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
         # compute the accuracy
         pred_prob   = softmax(pred)
@@ -353,48 +386,87 @@ def test_loop(dataloader, model, loss_fn):
 
     test_loss = test_loss/num_batches
     correct   = correct.cpu().numpy()/size
-    print(f"Test Performance: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
-    print('Confusion matrix for test set:\n', confusion_matrix(test_y_all.cpu().data, test_pred_all.cpu().data))
+    logging.info(f"Test Performance: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    logging.info('Confusion matrix for test set:\n', confusion_matrix(test_y_all.cpu().data, test_pred_all.cpu().data))
     return test_loss, 100*correct, confusion_matrix(test_y_all.cpu().data, test_pred_all.cpu().data)
 
 # Step 5: prepare the DataLoader and select your optimizer and set the hyper-parameters for learning the model from DataLoader
 #------------------------------------------------------------------------------------------------------------------------------
 
-learning_rate     = 1e-4
-batch_size_val    = 64
-epochs            = 100
-loss_fn           = nn.CrossEntropyLoss()
-optimizer         = torch.optim.Adam(policy_network_model.parameters(), lr=learning_rate)
-softmax           = nn.Softmax(dim=1) # for calculating the probability of the network prediction. It is used in train_loop() and test_loop().
+#training_file_name           = 'data/human_replay_go_test3.txt'
+#training_file_name           = 'data/human_replay_go.txt'
+#training_file_name           = 'data_v1/TrainData.txt'
+training_file_name           = 'data_v2/Train_data.txt'
+t0 = time.time()
+board_tensors, label_tensors = read_board_data_from_file(training_file_name)
+#print(f"Time: it took {time.time()-t0} seconds to read 8 MB input file of human replays of go games")
+#print(f"Time: it took {time.time()-t0} seconds to read 189 MB input file of human replays of go games")
+print(f"Time: it took {time.time()-t0} seconds to read 8.7 GB input file of human replays of go games")
+train_dataset                = GoBoardDataset(board_tensors, label_tensors)
+  
 
-train_dataloader  = DataLoader(train_dataset, batch_size=batch_size_val, shuffle=True)  # shuffle the images in training set during fine-tuning
+network_type       = 2
+
+if network_type == 1:
+    
+    policy_network_model = AlphaGoPolicyNetwork(board_height=19, board_width=19, nf=32, number_of_moves=NUMBER_OF_MOVES)
+    model_save_path_prefix = 'modelv1_on_data_v2'
+    logging.basicConfig(filename=model_save_path_prefix + '/logfile.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info(f"{'AlphaGoPolicyNetwork_v1:':<{20}} {'4 layers of cnn':<{20}}")    
+
+elif network_type == 2:
+    
+    policy_network_model = AlphaGoPolicyNetwork_v2(board_height=19, board_width=19, nf=32, number_of_moves=NUMBER_OF_MOVES)
+    model_save_path_prefix = 'modelv2_on_data_v2'
+    logging.basicConfig(filename=model_save_path_prefix + '/logfile.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info(f"{'AlphaGoPolicyNetwork_v2:':<{20}} {'8 layers of cnn':<{20}}")
+    
+elif network_type == 3:
+    
+    logging.info(f"{'AlphaGoPolicyNetwork_v3:':<{20}} {'16 layers of cnn':<{20}}")
+    logging.info(f"not implemented yet ...")
+    
+policy_network_model.to(device)
+print(policy_network_model)
+
+
+
+learning_rate      = 1e-4
+batch_size_val     = 128
+epochs             = 400
+loss_fn            = nn.CrossEntropyLoss()
+optimizer          = torch.optim.Adam(policy_network_model.parameters(), lr=learning_rate)
+softmax            = nn.Softmax(dim=1) # for calculating the probability of the network prediction. It is used in train_loop() and test_loop().
+
+train_dataloader   = DataLoader(train_dataset, batch_size=batch_size_val, shuffle=True)  # shuffle the images in training set during fine-tuning
 #test_dataloader   = DataLoader(test_dataset, batch_size=batch_size_val,  shuffle=False) # you don't need to shuffle test images as they are not used during training
 
-save_path             = 'model/alphago_policy_model_' 
-loss_save_path        = 'model/alphago_policy_model' + '_losses.mat'
-train_losses = []
-test_losses  = []
-train_accuracies = []
-test_accuracies = []
-start_time = time.time()
+
+save_path          = model_save_path_prefix + '/max_epoch_400_batch_128/alphago_policy_model_' 
+loss_save_path     = model_save_path_prefix + '/max_epoch_400_batch_128/alphago_policy_model' + '_losses.mat'
+train_losses       = []
+test_losses        = []
+train_accuracies   = []
+test_accuracies    = []
+start_time         = time.time()
+
+
+
 for t in range(epochs):
-    print(f"Epoch {t+1}\n-------------------------------")
+    logging.info(f"Epoch {t+1}\n-------------------------------")
     avg_train_loss, train_accuracy                    = train_loop(train_dataloader, policy_network_model, loss_fn, optimizer)
-    #avg_test_loss, test_accuracy, conf_matrix_test    = test_loop(test_dataloader,   policy_network_model, loss_fn)
     # save the losses and accuracies
     train_losses.append(avg_train_loss)
-    #test_losses.append(avg_test_loss)
     train_accuracies.append(train_accuracy)
-    #test_accuracies.append(test_accuracy)
-    print("Epoch %d training time: %.3f minutes" %( t, (time.time()-start_time)/60) )
-    if t%10 == 0:
-        print(f"saving the trained model at epoch{t} ...")
+    logging.info("Epoch %d training time: %.3f minutes" %( t, (time.time()-start_time)/60))
+    if t%10 == 0:     
+        logging.info(f"saving the trained model at epoch{t} ...")        
         torch.save(policy_network_model.state_dict(), save_path + '_epoch_' + str(t) + '.pth')
 
 
-print("AlphaGoPolicyNetwork model has been trained!")
-print("Total training time: %.3f sec" %( (time.time()-start_time)) )
-print("Total training time: %.3f hrs" %( (time.time()-start_time)/3600) )
+logging.info("AlphaGoPolicyNetwork model has been trained!")
+logging.info("Total training time: %.3f sec" %( (time.time()-start_time)) )
+logging.info("Total training time: %.3f hrs" %( (time.time()-start_time)/3600) )
 savemat(loss_save_path, {'train_losses':train_losses})
 
 '''
