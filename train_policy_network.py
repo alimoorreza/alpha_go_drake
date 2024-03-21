@@ -1,9 +1,9 @@
 # Step 1: load the Torch library and other utilities
 #----------------------------------------------------
-from torch.utils.data import DataLoader
-from torchvision import models,transforms,datasets
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision import models,transforms,datasets
 from torch.autograd import Variable
 from PIL import Image
 import numpy as np
@@ -265,9 +265,9 @@ class AlphaGoPolicyNetwork_v2(nn.Module):
 
         # End layers: a series of dense linear layers (almost like an MLP for final classification)
         self.linear_layers = nn.Sequential(
-                nn.Linear(495616, int(495616/2)),
+                nn.Linear(495616, 4096),
                 nn.ReLU(),
-                nn.Linear(int(495616/2), 1024),
+                nn.Linear(4096, 1024),
                 nn.ReLU(),
                 nn.Linear(1024, number_of_moves)
             )
@@ -390,20 +390,8 @@ def test_loop(dataloader, model, loss_fn):
     logging.info('Confusion matrix for test set:\n', confusion_matrix(test_y_all.cpu().data, test_pred_all.cpu().data))
     return test_loss, 100*correct, confusion_matrix(test_y_all.cpu().data, test_pred_all.cpu().data)
 
-# Step 5: prepare the DataLoader and select your optimizer and set the hyper-parameters for learning the model from DataLoader
+# Step 5: instantiate the network, prepare the DataLoader and select your optimizer and set the hyper-parameters for learning the model from DataLoader
 #------------------------------------------------------------------------------------------------------------------------------
-
-#training_file_name           = 'data/human_replay_go_test3.txt'
-#training_file_name           = 'data/human_replay_go.txt'
-#training_file_name           = 'data_v1/TrainData.txt'
-training_file_name           = 'data_v2/Train_data.txt'
-t0 = time.time()
-board_tensors, label_tensors = read_board_data_from_file(training_file_name)
-#print(f"Time: it took {time.time()-t0} seconds to read 8 MB input file of human replays of go games")
-#print(f"Time: it took {time.time()-t0} seconds to read 189 MB input file of human replays of go games")
-print(f"Time: it took {time.time()-t0} seconds to read 8.7 GB input file of human replays of go games")
-train_dataset                = GoBoardDataset(board_tensors, label_tensors)
-  
 
 network_type       = 2
 
@@ -428,6 +416,18 @@ elif network_type == 3:
     
 policy_network_model.to(device)
 print(policy_network_model)
+
+
+#training_file_name           = 'data/human_replay_go_test3.txt'
+#training_file_name           = 'data/human_replay_go.txt'
+#training_file_name           = 'data_v1/TrainData.txt'
+training_file_name           = 'data_v2/Train_data.txt'
+t0 = time.time()
+board_tensors, label_tensors = read_board_data_from_file(training_file_name)
+#print(f"Time: it took {time.time()-t0} seconds to read 8 MB input file of human replays of go games")
+#print(f"Time: it took {time.time()-t0} seconds to read 189 MB input file of human replays of go games")
+print(f"Time: it took {time.time()-t0} seconds to read 8.7 GB input file of human replays of go games")
+train_dataset                = GoBoardDataset(board_tensors, label_tensors)
 
 
 
